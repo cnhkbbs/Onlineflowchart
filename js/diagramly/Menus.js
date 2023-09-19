@@ -30,7 +30,12 @@
 		icon.setAttribute('valign', 'bottom');
 		icon.setAttribute('src', Editor.helpImage);
 		link.appendChild(icon);
-		
+
+		if (Editor.cssDarkMode)
+		{
+			icon.className = 'geAdaptiveAsset';
+		}
+
 		mxEvent.addGestureListeners(link, mxUtils.bind(this, function(evt)
 		{
 			this.editorUi.hideCurrentMenu();
@@ -308,7 +313,10 @@
         }));
 
 		lightModeAction.setToggleAction(true);
-		lightModeAction.setSelectedCallback(function() { return !Editor.isAutoDarkMode(true) && !Editor.isDarkMode(); });
+		lightModeAction.setSelectedCallback(function()
+		{
+			return !editorUi.isAutoDarkMode(true) && !Editor.isDarkMode() && !Editor.cssDarkMode;
+		});
 		
         var darkModeAction = editorUi.actions.put('darkMode', new Action(mxResources.get('dark'), function(e)
         {
@@ -316,7 +324,10 @@
         }));
 
 		darkModeAction.setToggleAction(true);
-		darkModeAction.setSelectedCallback(function() { return !Editor.isAutoDarkMode(true) && Editor.isDarkMode(); });
+		darkModeAction.setSelectedCallback(function()
+		{
+			return !editorUi.isAutoDarkMode(true) && (Editor.isDarkMode() || Editor.cssDarkMode);
+		});
 		
         var autoModeAction = editorUi.actions.put('autoMode', new Action(mxResources.get('automatic'), function(e)
         {
@@ -324,9 +335,12 @@
         }));
 
 		autoModeAction.setToggleAction(true);
-		autoModeAction.setSelectedCallback(function() { return Editor.isAutoDarkMode(true); });
-		
-        var toggleSimpleModeAction = editorUi.actions.put('toggleSimpleMode', new Action(mxResources.get('classic'), function(e)
+		autoModeAction.setSelectedCallback(function()
+		{
+			return editorUi.isAutoDarkMode(true);
+		});
+
+        var toggleSimpleModeAction = editorUi.actions.put('toggleSimpleMode', new Action(mxResources.get('simple'), function(e)
         {
 			editorUi.setCurrentTheme((Editor.currentTheme == 'simple') ?
 				((!Editor.isDarkMode()) ? 'kennedy' : 'dark') : 'simple');
@@ -335,7 +349,7 @@
 		toggleSimpleModeAction.setToggleAction(true);
 		toggleSimpleModeAction.visible = Editor.currentTheme != 'min' && Editor.currentTheme != 'sketch' &&
 			Editor.currentTheme != 'atlas';
-		toggleSimpleModeAction.setSelectedCallback(function() { return Editor.currentTheme != 'simple'; });
+		toggleSimpleModeAction.setSelectedCallback(function() { return Editor.currentTheme == 'simple'; });
 
         var toggleSketchModeAction = editorUi.actions.put('toggleSketchMode', new Action(mxResources.get('sketch'), function(e)
         {
@@ -348,7 +362,7 @@
 		editorUi.actions.addAction('properties...', function()
 		{
 			var dlg = new FilePropertiesDialog(editorUi);
-			editorUi.showDialog(dlg.container, 320, 140, true, true);
+			editorUi.showDialog(dlg.container, 340, 180, true, true);
 			dlg.init();
 		}).isEnabled = isGraphEnabled;
 	
@@ -799,106 +813,104 @@
 				dlg.init();
 			}
 		}, null, null, Editor.ctrlKey + '+Shift+M');
-
-		var currentStyle = null;
 		
 		editorUi.actions.addAction('copyStyle', function()
 		{
 			if (graph.isEnabled() && !graph.isSelectionEmpty())
 			{
-				currentStyle = graph.copyStyle(graph.getSelectionCell())
+				editorUi.copiedStyle = graph.copyStyle(graph.getSelectionCell())
 			}
-		}, null, null, 'Alt+Shift+Q');
+		}, null, null, 'Alt+C');
 
 		editorUi.actions.addAction('pasteStyle', function()
 		{
-			if (graph.isEnabled() && !graph.isSelectionEmpty() && currentStyle != null)
+			if (graph.isEnabled() && !graph.isSelectionEmpty() && editorUi.copiedStyle != null)
 			{
-				graph.pasteStyle(currentStyle, graph.getSelectionCells())
+				graph.pasteStyle(editorUi.copiedStyle, graph.getSelectionCells())
 			}
-		}, null, null, 'Alt+Shift+W');
+		}, null, null, 'Alt+V');
 		
 		editorUi.actions.put('exportSvg', new Action(mxResources.get('formatSvg') + '...', function()
 		{
 			editorUi.showExportDialog(mxResources.get('formatSvg'), true, mxResources.get('export'),
-				'https://www.diagrams.net/doc/faq/export-diagram',
+				'https://www.drawio.com/doc/faq/export-diagram',
 				mxUtils.bind(this, function(scale, transparentBackground, ignoreSelection,
 					addShadow, editable, embedImages, border, cropImage, currentPage,
-					linkTarget, grid, keepTheme, exportType, embedFonts, lblToSvg)
+					linkTarget, grid, theme, exportType, embedFonts, lblToSvg)
 				{
 					var val = parseInt(scale);
+					editorUi.lastExportSvgEditable = editable;
 					
 					if (!isNaN(val) && val > 0)
 					{
 						if (lblToSvg)
 						{
 							editorUi.downloadFile('remoteSvg', null, null, ignoreSelection, null, cropImage,
-										 transparentBackground, scale, border, null, editable);
+								transparentBackground, scale, border, null, editable);
 						}
 						else
 						{
 							editorUi.exportSvg(val / 100, transparentBackground, ignoreSelection,
 								addShadow, editable, embedImages, border, !cropImage, false,
-								linkTarget, keepTheme, exportType, embedFonts);
+								linkTarget, theme, exportType, embedFonts);
 						}
 					}
-				}), true, null, 'svg', true);
+				}), true, editorUi.lastExportSvgEditable, 'svg', true);
 		}));
-		
-		editorUi.actions.put('exportPng', new Action(mxResources.get('formatPng') + '...', function()
+
+		function exportImage(format, defaultEditable, done)
 		{
 			if (editorUi.isExportToCanvas())
 			{
 				editorUi.showExportDialog(mxResources.get('image'), false, mxResources.get('export'),
-					'https://www.diagrams.net/doc/faq/export-diagram',
+					'https://www.drawio.com/doc/faq/export-diagram',
 					mxUtils.bind(this, function(scale, transparentBackground, ignoreSelection, addShadow, editable,
-						embedImages, border, cropImage, currentPage, dummy, grid, keepTheme, exportType)
+						embedImages, border, cropImage, currentPage, dummy, grid, theme, exportType)
 					{
 						var val = parseInt(scale);
-						
+
 						if (!isNaN(val) && val > 0)
 						{
-							editorUi.exportImage(val / 100, transparentBackground, ignoreSelection,
-								addShadow, editable, border, !cropImage, false, null, grid, null,
-								keepTheme, exportType);
+							editorUi.exportImage(val / 100, transparentBackground && format == 'png',
+								ignoreSelection, addShadow, editable && format == 'png', border,
+								!cropImage, false, format, grid, null, theme, exportType);
+
+							if (done != null)
+							{
+								done(scale, transparentBackground, ignoreSelection, addShadow, editable, embedImages,
+									border, cropImage, currentPage, dummy, grid, theme, exportType);
+							}
 						}
-					}), true, Editor.defaultIncludeDiagram, 'png', true);
+					}), true, defaultEditable, format, true);
 			}
 			else if (!editorUi.isOffline() && (!mxClient.IS_IOS || !navigator.standalone))
 			{
-				editorUi.showRemoteExportDialog(mxResources.get('export'), null, mxUtils.bind(this, function(ignoreSelection, editable, transparent, scale, border)
+				editorUi.showRemoteExportDialog(mxResources.get('export'), null, mxUtils.bind(this,
+					function(ignoreSelection, editable, transparent, scale, border)
 				{
-					editorUi.downloadFile((editable) ? 'xmlpng' : 'png', null, null, ignoreSelection, null, null, transparent, scale, border);
+					editorUi.downloadFile((editable && format == 'png') ? 'xmlpng' : format,
+						null, null, ignoreSelection, null, null, transparent, scale, border);
 				}), false, true);
 			}
+		};
+		
+		editorUi.actions.put('exportPng', new Action(mxResources.get('formatPng') + '...', function()
+		{
+			exportImage('png', editorUi.lastExportPngEditable, function(scale,
+				transparentBackground, ignoreSelection, addShadow, editable)
+			{
+				editorUi.lastExportPngEditable = editable;
+			});
 		}));
 		
 		editorUi.actions.put('exportJpg', new Action(mxResources.get('formatJpg') + '...', function()
 		{
-			if (editorUi.isExportToCanvas())
-			{
-				editorUi.showExportDialog(mxResources.get('image'), false, mxResources.get('export'),
-					'https://www.diagrams.net/doc/faq/export-diagram',
-					mxUtils.bind(this, function(scale, transparentBackground, ignoreSelection, addShadow, editable,
-						embedImages, border, cropImage, currentPage, dummy, grid, keepTheme, exportType)
-					{
-						var val = parseInt(scale);
-						
-						if (!isNaN(val) && val > 0)
-						{
-							editorUi.exportImage(val / 100, false, ignoreSelection,
-								addShadow, false, border, !cropImage, false, 'jpeg',
-								grid, null, keepTheme, exportType);
-						}
-					}), true, false, 'jpeg', true);
-			}
-			else if (!editorUi.isOffline() && (!mxClient.IS_IOS || !navigator.standalone))
-			{
-				editorUi.showRemoteExportDialog(mxResources.get('export'), null, mxUtils.bind(this, function(ignoreSelection, editable, tranaparent, scale, border)
-				{
-					editorUi.downloadFile('jpeg', null, null, ignoreSelection, null, null, null, scale, border);
-				}), true, true);
-			}
+			exportImage('jpeg');
+		}));
+		
+		editorUi.actions.put('exportWebp', new Action(mxResources.get('formatWebp') + '...', function()
+		{
+			exportImage('webp');
 		}));
 
 		action = editorUi.actions.addAction('copyAsImage', mxUtils.bind(this, function()
@@ -906,7 +918,7 @@
 			var cells = mxUtils.sortCells(graph.model.getTopmostCells(graph.getSelectionCells()));
 			var xml = mxUtils.getXml((cells.length == 0) ? editorUi.editor.getGraphXml() : graph.encodeCells(cells));
 			editorUi.copyImage(cells, xml);
-		}));
+		}), null, null, 'Ctrl+Alt+X');
 
 		// Disabled in Safari as operation is not allowed
 		action.visible = Editor.enableNativeCipboard && editorUi.isExportToCanvas() && !mxClient.IS_SF;
@@ -918,25 +930,9 @@
 		action.setToggleAction(true);
 		action.setSelectedCallback(function() { return graph.shadowVisible; });
 
-		editorUi.actions.put('about', new Action(mxResources.get('about') + ' ' + EditorUi.VERSION + '...', function(arg1, evt)
+		editorUi.actions.put('about', new Action('v' + EditorUi.VERSION, function(arg1, evt)
 		{
-			if (evt != null && mxEvent.isShiftDown(evt))
-			{
-				mxLog.show();
-
-				if (window.console != null)
-				{
-					console.log(editorUi, window);
-				}
-			}
-			else if (editorUi.isOffline() || mxClient.IS_CHROMEAPP || EditorUi.isElectronApp)
-			{
-				editorUi.alert(editorUi.editor.appName + ' ' + EditorUi.VERSION);
-			}
-			else
-			{
-				editorUi.openLink('https://www.diagrams.net/');
-			}
+			// do nothing
 		}));
 		
 		editorUi.actions.addAction('support...', function()
@@ -1199,7 +1195,7 @@
 				}
 				
 				editorUi.showLocalStorageDialog(mxResources.get('configuration') + ':', Editor.configurationKey,
-					buttons, splashCb.parentNode, 'https://www.diagrams.net/doc/faq/configure-diagram-editor',
+					buttons, splashCb.parentNode, 'https://www.drawio.com/doc/faq/configure-diagram-editor',
 					function()
 					{
 						if (splashCb.parentNode != null)
@@ -1261,7 +1257,7 @@
 					menubar != null && Editor.enableSimpleTheme &&
 					editorUi.getServiceName() != 'atlassian')
 				{
-					var themeMenu = this.get('appearance');
+					var themeMenu = this.get('dynamicAppearance');
 					
 					if (themeMenu != null)
 					{
@@ -1310,7 +1306,7 @@
 								}
 								else
 								{
-									elt.style.backgroundImage = 'url(' + ((Editor.isDarkMode()) ?
+									elt.style.backgroundImage = 'url(' + ((Editor.isDarkMode() || Editor.cssDarkMode) ?
 										Editor.thinDarkImage : Editor.thinLightImage) + ')';
 								}
 							}
@@ -1340,12 +1336,27 @@
 			'interHierarchySpacing': 60,
 			'parallelEdgeSpacing': 10}}];
 		
-		// Adds action
+		// Adds action for running layouts
 		editorUi.actions.addAction('runLayout', function()
 		{
 	    	editorUi.showCustomLayoutDialog(JSON.stringify(
 				editorUi.customLayoutConfig, null, 2));
 		});
+
+		// Adds action for converting dark mode colors
+		editorUi.actions.put('convertDarkModeColors', new Action('Dark Mode Colors...', function(evt)
+		{
+			if (Editor.enableCssDarkMode)
+			{
+				if (editorUi.darkModeColorsWindow == null)
+				{
+					editorUi.darkModeColorsWindow = new DarkModeColorsWindow(
+						editorUi, document.body.offsetWidth - 520, 80, 200, 100);
+				}
+
+				editorUi.darkModeColorsWindow.window.setVisible(true);
+			}
+		}));
 
 		// Adds fullscreen toggle to zoom menu in sketch and min
         var viewZoomMenu = this.get('viewZoom');
@@ -1561,7 +1572,7 @@
 					
 					if (e.keyCode == 13 && term.length > 0)
 					{
-						this.editorUi.openLink('https://www.diagrams.net/search?src=' +
+						this.editorUi.openLink('https://www.drawio.com/search?src=' +
 							(EditorUi.isElectronApp ? 'DESKTOP' : encodeURIComponent(location.host)) + 
 							'&search=' + encodeURIComponent(term));
 						input.value = '';
@@ -1605,7 +1616,7 @@
 				{
 					editorUi.actions.addAction('website...', function()
 					{
-						editorUi.openLink('https://www.diagrams.net');
+						editorUi.openLink('https://www.drawio.com');
 					});
 					
 					editorUi.actions.addAction('check4Updates', function()
@@ -1636,20 +1647,40 @@
 				this.addSubmenu('testDevelop', menu, parent);
 			}
 		})));
-
-		// Experimental
-		mxResources.parse('diagramLanguage=Diagram Language');
-		editorUi.actions.addAction('diagramLanguage...', function()
+		
+		editorUi.actions.addAction('languageCode...', function()
 		{
-			var lang = prompt('Language Code', Graph.diagramLanguage || '');
-			
-			if (lang != null)
+			var lang = Graph.diagramLanguage || '';
+					
+			var dlg = new FilenameDialog(editorUi, lang, mxResources.get('ok'), mxUtils.bind(this, function(newLang)
 			{
-				Graph.diagramLanguage = (lang.length > 0) ? lang : null;
-				graph.refresh();
-			}
+				if (newLang != null)
+				{
+					Graph.diagramLanguage = (newLang.length > 0) ? newLang : null;
+					Graph.translateDiagram = true;
+					graph.refresh();
+				}
+			}), mxResources.get('languageCode'), null, null, 'https://www.drawio.com/blog/translate-diagrams');
+			editorUi.showDialog(dlg.container, 340, 96, true, true);
+			dlg.init();
 		});
 		
+		this.put('diagramLanguage', new Menu(mxUtils.bind(this, function(menu, parent)
+		{
+			this.addMenuItems(menu, ['languageCode', '-'], parent);
+
+			var item = menu.addItem(mxResources.get('disabled'), null, function()
+			{
+				Graph.translateDiagram = false;
+				graph.refresh();
+			}, parent);
+
+			if (!Graph.translateDiagram)
+			{
+				menu.addCheckmark(item, Editor.checkmarkImage);
+			}
+		})));
+
 		// Only visible in test mode
 		if (urlParams['test'] == '1')
 		{
@@ -1658,12 +1689,14 @@
 			mxResources.parse('createSidebarEntry=Create Sidebar Entry');
 			mxResources.parse('testCheckFile=Check File');
 			mxResources.parse('testDiff=Diff/Sync');
-			mxResources.parse('testInspectPages=Check Pages');
+			mxResources.parse('testChecksum=Checksum');
+			mxResources.parse('testCheckPages=Check Pages');
 			mxResources.parse('testFixPages=Fix Pages');
 			mxResources.parse('testInspect=Inspect');
 			mxResources.parse('testShowConsole=Show Console');
 			mxResources.parse('testXmlImageExport=XML Image Export');
 			mxResources.parse('testOptimize=Remove Inline Images');
+			mxResources.parse('testPerformance=Performance');
 
 			editorUi.actions.addAction('createSidebarEntry', mxUtils.bind(this, function()
 			{
@@ -1682,11 +1715,49 @@
 			editorUi.actions.addAction('showBoundingBox', mxUtils.bind(this, function()
 			{
 				var b = graph.getGraphBounds();
+
 				var tr = graph.view.translate;
 				var s = graph.view.scale;
 				graph.insertVertex(graph.getDefaultParent(), null, '',
 					b.x / s - tr.x, b.y / s - tr.y, b.width / s, b.height / s,
 					'fillColor=none;strokeColor=red;');
+
+				// Checking bounding boxes
+				function checkBounds(shape)
+				{
+					return shape == null || shape.boundingBox == null || (!isNaN(shape.boundingBox.x) &&
+						!isNaN(shape.boundingBox.y) && !isNaN(shape.boundingBox.width) &&
+						!isNaN(shape.boundingBox.height));
+				};
+
+				var invalid = 0;
+				var count = 0;
+
+				graph.view.states.visit(function(id, state)
+				{
+					var valid = true;
+
+					if (!checkBounds(state.shape))
+					{
+						console.log('invalid shape', state.cell.id, state.shape);
+						valid = false;
+					}
+
+					if (!checkBounds(state.text))
+					{
+						console.log('invalid text', state.cell.id, state.text);
+						valid = false;
+					}
+
+					if (!valid)
+					{
+						invalid++;
+					}
+
+					count++;
+				});
+
+				console.log('states checked', count, 'invalid', invalid);
 			}));
 	
 			editorUi.actions.addAction('testCheckFile', mxUtils.bind(this, function()
@@ -1922,7 +1993,52 @@
 				}
 			}));
 
-			editorUi.actions.addAction('testInspectPages', mxUtils.bind(this, function()
+			editorUi.actions.addAction('testChecksum', mxUtils.bind(this, function()
+			{
+				var file = editorUi.getCurrentFile();
+
+				if (editorUi.pages != null && file != null)
+				{
+					if (editorUi.spinner.spin(document.body, mxResources.get('loading')))
+					{
+						file.getLatestVersion(function(latestFile)
+						{
+							editorUi.spinner.stop();
+
+							var localChecksum = editorUi.getHashValueForPages(editorUi.pages);
+							var localRev = file.getCurrentRevisionId();
+							var remoteChecksum = editorUi.getHashValueForPages(
+								latestFile.getShadowPages());
+							var descChecksum = latestFile.getDescriptorChecksum(
+								latestFile.getDescriptor());
+							var remoteRev = latestFile.getCurrentRevisionId();
+							
+							console.log('Local File', [file],
+								'modified', file.isModified(),
+								'checksum', localChecksum);
+							
+							console.log('Remote File', [latestFile],
+								'rev', remoteRev == localRev,
+								'desc', descChecksum == remoteChecksum,
+								'checksum', remoteChecksum);
+							
+							editorUi.alert('Checksums ' +
+								(remoteChecksum == localChecksum ?
+								'match' : 'no not match'));
+						}, function(err)
+						{
+							console.log('Error getLatestVersion', err);
+							editorUi.handleError(err);
+						});
+					}
+				}
+				else
+				{
+					console.log('Checksum: no file or pages');
+				}
+			}));
+
+			editorUi.actions.addAction('testCheckPages', mxUtils.bind(this, function()
 			{
 				var file = editorUi.getCurrentFile();
 				console.log('editorUi', editorUi, 'file', file);
@@ -2132,12 +2248,186 @@
 				mxLog.window.div.style.zIndex = mxPopupMenu.prototype.zIndex - 2;
 			});
 			
+
+			// Adds logging for performance
+			var prevRevalidate = null;
+			var prevSelectPage = null;
+			var prevDiffPages = null;
+			var prevPatchPages = null;
+			var prevClonePages = null;
+			var prevGetHashValueForPages = null;
+			var prevResolveCrossReferences = null;
+
+			editorUi.actions.addAction('testPerformance', mxUtils.bind(this, function()
+			{
+				if (prevRevalidate != null)
+				{
+					graph.view.revalidate = prevRevalidate;
+					prevRevalidate = null;
+				}
+				else
+				{
+					prevRevalidate = graph.view.revalidate;
+
+					graph.view.revalidate = function()
+					{
+						var t0 = Date.now();
+						var result = prevRevalidate.apply(this, arguments);
+						EditorUi.debug('[Performance] mxGraphView.revalidate',
+							[this], 'time', (Date.now() - t0) + ' ms',
+							'args', arguments);
+						
+						return result;
+					};
+				}
+
+				if (prevSelectPage != null)
+				{
+					editorUi.selectPage = prevSelectPage;
+					prevSelectPage = null;
+				}
+				else
+				{
+					prevSelectPage = editorUi.selectPage;
+
+					editorUi.selectPage = function()
+					{
+						var t0 = Date.now();
+						var result = prevSelectPage.apply(this, arguments);
+						EditorUi.debug('[Performance] EditorUi.selectPage',
+							[this], 'time', (Date.now() - t0) + ' ms',
+							'args', arguments);
+						
+						return result;
+					};
+				}
+
+				if (prevDiffPages != null)
+				{
+					editorUi.diffPages = prevDiffPages;
+					prevDiffPages = null;
+				}
+				else
+				{
+					prevDiffPages = editorUi.diffPages;
+
+					editorUi.diffPages = function()
+					{
+						var t0 = Date.now();
+						var result = prevDiffPages.apply(this, arguments);
+						EditorUi.debug('[Performance] EditorUi.diffPages',
+							[this], 'time', (Date.now() - t0) + ' ms',
+							'args', arguments);
+						
+						return result;
+					};
+				}
+
+				if (prevPatchPages != null)
+				{
+					editorUi.patchPages = prevPatchPages;
+					prevPatchPages = null;
+				}
+				else
+				{
+					prevPatchPages = editorUi.patchPages;
+
+					editorUi.patchPages = function()
+					{
+						var t0 = Date.now();
+						var result = prevPatchPages.apply(this, arguments);
+						EditorUi.debug('[Performance] EditorUi.patchPages',
+							[this], 'time', (Date.now() - t0) + ' ms',
+							'args', arguments);
+						
+						return result;
+					};
+				};
+
+				if (prevClonePages != null)
+				{
+					editorUi.clonePages = prevClonePages;
+					prevClonePages = null;
+				}
+				else
+				{
+					prevClonePages = editorUi.clonePages;
+
+					editorUi.clonePages = function()
+					{
+						var t0 = Date.now();
+						var result = prevClonePages.apply(this, arguments);
+						EditorUi.debug('[Performance] EditorUi.clonePages',
+							[this], 'time', (Date.now() - t0) + ' ms',
+							'args', arguments);
+						
+						return result;
+					};
+				};
+
+				if (prevGetHashValueForPages != null)
+				{
+					editorUi.getHashValueForPages = prevGetHashValueForPages;
+					prevGetHashValueForPages = null;
+				}
+				else
+				{
+					prevGetHashValueForPages = editorUi.getHashValueForPages;
+
+					editorUi.getHashValueForPages = function()
+					{
+						var t0 = Date.now();
+						var result = prevGetHashValueForPages.apply(this, arguments);
+						EditorUi.debug('[Performance] EditorUi.getHashValueForPages',
+							[this], 'time', (Date.now() - t0) + ' ms',
+							'args', arguments);
+						
+						return result;
+					};
+				}
+
+				if (prevResolveCrossReferences != null)
+				{
+					editorUi.resolveCrossReferences = prevResolveCrossReferences;
+					prevResolveCrossReferences = null;
+				}
+				else
+				{
+					prevResolveCrossReferences = editorUi.resolveCrossReferences;
+
+					editorUi.resolveCrossReferences = function()
+					{
+						var t0 = Date.now();
+						var result = prevResolveCrossReferences.apply(this, arguments);
+						EditorUi.debug('[Performance] EditorUi.resolveCrossReferences',
+							[this], 'time', (Date.now() - t0) + ' ms',
+							'args', arguments);
+
+						return result;
+					};
+				}
+
+				EditorUi.debug('[Performance]', (prevRevalidate != null) ? 'Enabled' : 'Disabled');
+			}));
+
 			this.put('testDevelop', new Menu(mxUtils.bind(this, function(menu, parent)
 			{
 				this.addMenuItems(menu, ['createSidebarEntry', 'showBoundingBox', '-',
-					'testInspectPages', 'testFixPages', '-', 'testCheckFile', 'testDiff', '-',
-					'testInspect', 'testOptimize', '-', 'testXmlImageExport', '-',
-					'testShowConsole'], parent);
+					'testCheckPages', 'testChecksum', 'testFixPages', '-',
+					'testCheckFile', 'testDiff', '-', 'testInspect', 'testOptimize', '-',
+					'testXmlImageExport', '-'], parent);
+
+				var item = menu.addItem(mxResources.get('testPerformance'), null, function()
+				{
+					editorUi.actions.get('testPerformance').funct();
+				}, parent);
+				
+				if (prevRevalidate != null)
+				{
+					menu.addCheckmark(item, Editor.checkmarkImage);
+				}
+
+				this.addMenuItems(menu, ['-', 'testShowConsole'], parent);
 			})));
 		}
 		
@@ -2176,7 +2466,7 @@
 				{
 					editorUi.spinner.stop();
 					
-					editorUi.showHtmlDialog(mxResources.get('create'), 'https://www.diagrams.net/doc/faq/embed-html-options',
+					editorUi.showHtmlDialog(mxResources.get('create'), 'https://www.drawio.com/doc/faq/embed-html-options',
 						url, function(publicUrl, zoomEnabled, initialZoom, linkTarget, linkColor, fit, allPages, layers, tags, lightbox, editLink)
 					{
 						editorUi.createHtml(publicUrl, zoomEnabled, initialZoom, linkTarget, linkColor, fit, allPages,
@@ -2317,7 +2607,7 @@
 					});
 				}
 			}, mxResources.get('formatSvg'), mxResources.get('image'),
-				true, 'https://www.diagrams.net/doc/faq/embed-svg.html');
+				true, 'https://www.drawio.com/doc/faq/embed-svg.html');
 		}));
 		
 		editorUi.actions.put('embedIframe', new Action(mxResources.get('iframe') + '...', function()
@@ -2364,7 +2654,15 @@
 			link.style.cursor = 'pointer';
 			mxUtils.write(link, mxResources.get('getNotionChromeExtension'));
 			footer.appendChild(link);
+			
+			mxUtils.setPrefixedStyle(link.style, 'transition', 'all 1s ease');
+			mxUtils.setOpacity(link, 0);
 
+			window.setTimeout(function()
+			{
+				mxUtils.setOpacity(link, 100);
+			}, 300);
+			
 			mxEvent.addListener(link, 'click', function(evt)
 			{
 				editorUi.openLink('https://chrome.google.com/webstore/detail/drawio-for-notion/plhaalebpkihaccllnkdaokdoeaokmle');
@@ -2387,12 +2685,12 @@
 						}
 
 						var dlg = new EmbedDialog(editorUi, editorUi.createLink(linkTarget, linkColor,
-							allPages, lightbox, editLink, layers, url, null, params, true));
+							allPages, lightbox, editLink, layers, url, null, params));
 						editorUi.showDialog(dlg.container, 450, 240, true, true);
 						dlg.init();
 					});
 				}
-			}, true, 'https://www.diagrams.net/blog/drawio-notion', footer);
+			}, true, 'https://www.drawio.com/blog/drawio-notion', footer);
 		}));
 		
 		editorUi.actions.put('publishLink', new Action(mxResources.get('link') + '...', function()
@@ -2478,6 +2776,21 @@
 				});
 			}
 		}
+
+		var action = editorUi.actions.addAction('improveContrast', function()
+		{
+			editorUi.setCssDarkModeEnabled(!Editor.enableCssDarkMode);
+		});
+		
+		action.isEnabled = function()
+		{
+			return Editor.isDarkMode() || Editor.cssDarkMode;
+		};
+		action.setToggleAction(true);
+		action.setSelectedCallback(function()
+		{
+			return Editor.enableCssDarkMode;
+		});
 		
 		var action = editorUi.actions.addAction('search', function()
 		{
@@ -2605,6 +2918,11 @@
 				if (editorUi.jpgSupported)
 				{
 					this.addMenuItems(menu, ['exportJpg'], parent);
+				}
+
+				if (editorUi.webpSupported)
+				{
+					this.addMenuItems(menu, ['exportWebp'], parent);
 				}
 			}
 			
@@ -2897,8 +3215,8 @@
 				}, parent);
 			}
 		}))).isEnabled = isGraphEnabled;
-		
-		this.put('appearance', new Menu(mxUtils.bind(this, function(menu, parent)
+
+		this.put('dynamicAppearance', new Menu(mxUtils.bind(this, function(menu, parent)
 		{
 			var iw = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
 
@@ -2938,11 +3256,48 @@
 				}
 			}
 
-			this.addMenuItems(menu, ['-', 'lightMode', 'darkMode', 'autoMode'], parent);
+			this.addMenuItems(menu, ['-', 'lightMode', 'darkMode'], parent);
+
+			if (editorUi.isAutoDarkModeSupported())
+			{
+				var item = editorUi.menus.addMenuItem(menu, 'autoMode', parent);
+
+				if (item != null)
+				{
+					item.setAttribute('title', mxResources.get('automatic') +
+						' (' + mxResources.get(Editor.cssDarkMode || Editor.isDarkMode() ?
+							'dark' : 'light') + ')');
+				}
+			}
 
 			if (urlParams['embed'] != '1')
 			{
 				this.addMenuItems(menu, ['-', 'toggleSimpleMode'], parent);
+			}
+		})));
+		
+		this.put('appearance', new Menu(mxUtils.bind(this, function(menu, parent)
+		{
+			this.addMenuItems(menu, ['-', 'lightMode', 'darkMode'], parent);
+
+			if (editorUi.isAutoDarkModeSupported())
+			{
+				var item = editorUi.menus.addMenuItem(menu, 'autoMode', parent);
+
+				if (item != null)
+				{
+					item.setAttribute('title', mxResources.get('automatic') +
+						' (' + mxResources.get(Editor.cssDarkMode || Editor.isDarkMode() ?
+							'dark' : 'light') + ')');
+				}
+			}
+			
+			menu.addSeparator(parent);
+			var item = editorUi.menus.addMenuItem(menu, 'improveContrast', parent);
+			
+			if (!editorUi.isOffline() || mxClient.IS_CHROMEAPP || EditorUi.isElectronApp)
+			{
+				editorUi.menus.addLinkToItem(item, 'https://github.com/jgraph/drawio/discussions/3701');
 			}
 		})));
 
@@ -3936,7 +4291,9 @@
 										
 										try
 										{
-											editorUi.loadLibrary(new UrlLibrary(this, req.getText(), fileUrl));
+											editorUi.loadLibrary(new UrlLibrary(
+												this, req.getText(), fileUrl));
+											editorUi.showSidebar();
 										}
 										catch (e)
 										{
@@ -4068,7 +4425,7 @@
 					
 					if (!editorUi.isOffline() || mxClient.IS_CHROMEAPP || EditorUi.isElectronApp)
 					{
-						editorUi.menus.addLinkToItem(item, 'https://www.diagrams.net/doc/faq/scratchpad');
+						editorUi.menus.addLinkToItem(item, 'https://www.drawio.com/doc/faq/scratchpad');
 					}
 				}
 				
@@ -4101,7 +4458,7 @@
 					
 					if (!editorUi.isOffline() || mxClient.IS_CHROMEAPP || EditorUi.isElectronApp)
 					{
-						this.addLinkToItem(item, 'https://www.diagrams.net/doc/faq/scratchpad');
+						this.addLinkToItem(item, 'https://www.drawio.com/doc/faq/scratchpad');
 					}
 				}
 				
@@ -4193,13 +4550,16 @@
 		this.put('pages', new Menu(mxUtils.bind(this, function(menu, parent)
 		{
 			var page = editorUi.currentPage;
-			
-			menu.addItem(mxResources.get('insertPage'), null, mxUtils.bind(this, function()
-			{
-				editorUi.insertPage();
-			}), parent);
 
-			menu.addSeparator(parent);
+			if (!editorUi.editor.graph.isLightboxView())
+			{
+				menu.addItem(mxResources.get('insertPage'), null, mxUtils.bind(this, function()
+				{
+					editorUi.insertPage();
+				}), parent);
+
+				menu.addSeparator(parent);
+			}
 			
 			if (editorUi.pages != null)
 			{
@@ -4209,7 +4569,7 @@
 					{
 						var item = null;
 
-						if (editorUi.pages[index] == page)
+						if (editorUi.pages[index] == page && !editorUi.editor.graph.isLightboxView())
 						{
 							item = editorUi.menus.addSubmenu('currentPage', menu, parent,
 								editorUi.getShortPageName(page));
@@ -4262,6 +4622,18 @@
 			
 			storeBkpAction.setToggleAction(true);
 			storeBkpAction.setSelectedCallback(function() { return enableStoreBkp; });
+
+			var enableGoogleFonts = urlParams['isGoogleFontsEnabled'] == '1';
+			
+			var googleFontsAction = editorUi.actions.addAction('googleFonts', function()
+			{
+				editorUi.toggleGoogleFonts();
+				enableGoogleFonts = !enableGoogleFonts;
+				editorUi.alert(mxResources.get('restartForChangeRequired'));
+			});
+
+			googleFontsAction.setToggleAction(true);
+			googleFontsAction.setSelectedCallback(function() { return enableGoogleFonts; });
 
 			editorUi.actions.addAction('openDevTools', function()
 			{
@@ -4335,14 +4707,10 @@
 
 				if (EditorUi.isElectronApp)
 				{
-					editorUi.menus.addMenuItems(menu, ['-', 'spellCheck', 'autoBkp', 'drafts', '-'], parent);
-				}
-	
-				if (Graph.translateDiagram)
-				{
-					editorUi.menus.addMenuItems(menu, ['diagramLanguage'], parent);
+					editorUi.menus.addMenuItems(menu, ['-', 'googleFonts', 'spellCheck', 'autoBkp', 'drafts', '-'], parent);
 				}
 
+				this.addSubmenu('diagramLanguage', menu, parent);
 				menu.addSeparator(parent);
 				
 				if (editorUi.mode != App.MODE_ATLAS) 
@@ -4367,7 +4735,8 @@
 					editorUi.menus.addSubmenu('appearance', menu, parent);
 				}
 
-				if (urlParams['embed'] != '1')
+				if (urlParams['embed'] != '1' && urlParams['extAuth'] != '1' &&
+					editorUi.mode != App.MODE_ATLAS)
 				{
 					this.addSubmenu('theme', menu, parent);
 				}
@@ -4380,13 +4749,13 @@
 					
 					if (!editorUi.isOffline() || mxClient.IS_CHROMEAPP || EditorUi.isElectronApp)
 					{
-						this.addLinkToItem(item, 'https://www.diagrams.net/doc/faq/math-typesetting');
+						this.addLinkToItem(item, 'https://www.drawio.com/doc/faq/math-typesetting');
 					}
 				}
 				
 				if (EditorUi.isElectronApp)
 				{
-					this.addMenuItems(menu, ['spellCheck', 'autoBkp', 'drafts', '-'], parent);
+					this.addMenuItems(menu, ['googleFonts', 'spellCheck', 'autoBkp', 'drafts', '-'], parent);
 				}
 
 				this.addMenuItems(menu, ['copyConnect', 'collapseExpand', '-'], parent);
@@ -4411,12 +4780,7 @@
 				}
 
 				this.addMenuItems(menu, ['-', 'editDiagram'], parent);
-		
-				if (Graph.translateDiagram)
-				{
-					this.addMenuItems(menu, ['diagramLanguage']);
-				}
-				
+				this.addSubmenu('diagramLanguage', menu, parent);
 				menu.addSeparator(parent);
 
 				if (urlParams['embed'] != '1' && (isLocalStorage || mxClient.IS_CHROMEAPP))
@@ -4551,8 +4915,9 @@
 			
 			if (mxClient.IS_CHROMEAPP || EditorUi.isElectronApp)
 			{
-				editorUi.menus.addMenuItems(menu, ['new', 'open', '-', 'synchronize',
-					'-', 'save', 'saveAs', '-'], parent);
+				editorUi.menus.addMenuItems(menu, ['new', 'open', '-',
+					'synchronize', 'properties', '-',
+					'save', 'saveAs', '-'], parent);
 			}
 			else if (editorUi.mode == App.MODE_ATLAS)
 			{
@@ -4601,7 +4966,7 @@
 			
 			editorUi.menus.addSubmenu('exportAs', menu, parent);
 			
-			if (mxClient.IS_CHROMEAPP || EditorUi.isElectronApp)
+			if (mxClient.IS_CHROMEAPP || EditorUi.isElectronApp || editorUi.getServiceName() == 'atlassian')
 			{
 				editorUi.menus.addMenuItems(menu, ['import'], parent);
 			}
@@ -4908,7 +5273,7 @@
 					
 					if (!editorUi.isOffline() || mxClient.IS_CHROMEAPP || EditorUi.isElectronApp)
 					{
-						this.addLinkToItem(item, 'https://www.diagrams.net/doc/faq/synchronize');
+						this.addLinkToItem(item, 'https://www.drawio.com/doc/faq/synchronize');
 					}
 					
 					menu.addSeparator(parent);
@@ -4941,7 +5306,7 @@
 						
 						if (!editorUi.isOffline() || mxClient.IS_CHROMEAPP || EditorUi.isElectronApp)
 						{
-							this.addLinkToItem(item, 'https://www.diagrams.net/doc/faq/synchronize');
+							this.addLinkToItem(item, 'https://www.drawio.com/doc/faq/synchronize');
 						}
 					}
 					
@@ -5519,7 +5884,8 @@
 						}
 					}
 				}));
-				this.editorUi.showDialog(dlg.container, 380, Editor.enableWebFonts ? 250 : 180, true, true);
+				this.editorUi.showDialog(dlg.container, 380, 
+					130 + (Editor.enableWebFonts ? 70 : 0) + (urlParams['isGoogleFontsEnabled'] != '0'? 50 : 0), true, true);
 				dlg.init();
 			}), parent, null, true);
 		})));

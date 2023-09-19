@@ -7,7 +7,7 @@ window.uiTheme = '';
 
 /**
  * No CSS and resources available in embed mode. Parameters and docs:
- * https://www.diagrams.net/doc/faq/embed-html-options
+ * https://www.drawio.com/doc/faq/embed-html-options
  */
 GraphViewer = function(container, xmlNode, graphConfig)
 {
@@ -20,12 +20,13 @@ mxUtils.extend(GraphViewer, mxEventSource);
 /**
  * Redirects editing to absolue URLs.
  */
-GraphViewer.prototype.editBlankUrl = 'https://app.diagrams.net/';
+GraphViewer.prototype.editBlankUrl = (urlParams['dev'] == '1') ? 
+	'https://test.draw.io/' : 'https://app.diagrams.net/';
 
 /**
  * Base URL for relative images.
  */
-GraphViewer.prototype.imageBaseUrl = 'https://viewer.diagrams.net/';
+GraphViewer.prototype.imageBaseUrl = window.DRAWIO_BASE_URL + '/';
 
 /**
  * Redirects editing to absolue URLs.
@@ -117,6 +118,11 @@ GraphViewer.prototype.minWidth = 100;
 GraphViewer.prototype.responsive = false;
 
 /**
+ * Dark mode
+ */
+GraphViewer.prototype.darkMode = false;
+
+/**
  * Initializes the viewer.
  */
 GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
@@ -138,6 +144,8 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 		this.graphConfig['center'] : (this.center || this.forceCenter);
 	this.checkVisibleState = (this.graphConfig['check-visible-state'] != null) ?
 		this.graphConfig['check-visible-state'] : this.checkVisibleState;
+	this.darkMode = (this.graphConfig['dark-mode'] != null) ?
+		this.graphConfig['dark-mode'] : this.darkMode;
 	this.toolbarItems = (this.graphConfig.toolbar != null) ?
 		this.graphConfig.toolbar.split(' ') : [];
 	this.zoomEnabled = mxUtils.indexOf(this.toolbarItems, 'zoom') >= 0;
@@ -172,6 +180,19 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 			var render = mxUtils.bind(this, function()
 			{
 				this.graph = new Graph(container);
+
+				if (this.darkMode)
+				{
+					if (Editor.enableCssDarkMode)
+					{
+						container.classList.add('geDarkMode');
+					}
+					else
+					{
+						EditorUi.setGraphDarkMode(this.graph, null, true);
+					}
+				}
+
 				this.graph.enableFlowAnimation = true;
 				this.graph.defaultPageBackgroundColor = 'transparent';
 				this.graph.diagramBackgroundColor = 'transparent';
@@ -453,7 +474,7 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 				}
 				else if (this.graphConfig.title != null && this.showTitleAsTooltip)
 				{
-					container.setAttribute('title', this.graphConfig.title);
+					container.setAttribute('title', this.graphConfig.titleTooltip || this.graphConfig.title);
 				}
 				
 				if (!this.responsive)
@@ -479,7 +500,7 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 					this.setLayersVisible(visible);
 				}
 				
-				this.graph.customLinkClicked = function(href)
+				this.graph.customLinkClicked = function(href, associatedCell)
 				{
 					try
 					{
@@ -494,7 +515,13 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 						}
 						else
 						{
-							this.handleCustomLink(href);
+							var bounds = this.getGraphBounds();
+							this.handleCustomLink(href, associatedCell);
+							
+							if (!bounds.equals(this.getGraphBounds()))
+							{
+								self.crop();
+							}
 						}
 					}
 					catch (e)
@@ -886,7 +913,6 @@ GraphViewer.prototype.addSizeHandler = function()
 		}
 	});
 
-	// Fallback for older browsers
 	if (GraphViewer.useResizeSensor)
 	{
 		if (document.documentMode <= 9)
@@ -934,7 +960,6 @@ GraphViewer.prototype.addSizeHandler = function()
 				}
 			});
 			
-			// Fallback for older browsers
 			if (GraphViewer.useResizeSensor)
 			{
 				if (document.documentMode <= 9)
@@ -1156,6 +1181,19 @@ GraphViewer.prototype.addToolbar = function()
 	toolbar.style.zIndex = this.toolbarZIndex;
 	toolbar.style.backgroundColor = '#eee';
 	toolbar.style.height = this.toolbarHeight + 'px';
+
+	if (this.darkMode)
+	{
+		if (Editor.enableCssDarkMode)
+		{
+			toolbar.classList.add('geDarkMode');
+		}
+		else
+		{
+			toolbar.style.filter = 'invert(1)';
+		}
+	}
+
 	this.toolbar = toolbar;
 	
 	if (this.graphConfig['toolbar-position'] == 'inline')
@@ -1312,7 +1350,7 @@ GraphViewer.prototype.addToolbar = function()
 		{
 			pageInfo = container.ownerDocument.createElement('div');
 			pageInfo.style.cssText = 'display:inline-block;position:relative;top:5px;padding:0 4px 0 4px;' +
-				'vertical-align:top;font-family:Helvetica,Arial;font-size:12px;;cursor:default;'
+				'vertical-align:top;font-family:Helvetica,Arial;font-size:12px;;cursor:default;color:#000;'
 			mxUtils.setOpacity(pageInfo, 70);
 			
 			var prevButton = addButton(mxUtils.bind(this, function()
@@ -1439,11 +1477,17 @@ GraphViewer.prototype.addToolbar = function()
 						layersDialog.style.overflowY = 'auto';
 						layersDialog.style.maxHeight = (this.graph.container.clientHeight - this.toolbarHeight - 10) + 'px'
 						layersDialog.style.zIndex = this.toolbarZIndex + 1;
+						layersDialog.style.color = '#000';
 						mxUtils.setOpacity(layersDialog, 80);
 						var origin = mxUtils.getDocumentScrollOrigin(document);
 						layersDialog.style.left = origin.x + r.left - 1 + 'px';
 						layersDialog.style.top = origin.y + r.bottom - 2 + 'px';
 						
+						if (this.darkMode)
+						{
+							layersDialog.style.filter = 'invert(93%) hue-rotate(180deg)';
+						}
+
 						document.body.appendChild(layersDialog);
 					}
 				}), Editor.layersImage, mxResources.get('layers') || 'Layers');
@@ -1482,6 +1526,12 @@ GraphViewer.prototype.addToolbar = function()
 						tagsComponent.div.style.color = '#000';
 						tagsComponent.div.style.border = '1px solid #d0d0d0';
 						tagsComponent.div.style.zIndex = this.toolbarZIndex + 1;
+
+						if (this.darkMode)
+						{
+							tagsComponent.div.style.filter = 'invert(93%) hue-rotate(180deg)';
+						}
+
 						mxUtils.setOpacity(tagsComponent.div, 80);
 					}
 
@@ -1551,8 +1601,8 @@ GraphViewer.prototype.addToolbar = function()
 	{
 		var filename = container.ownerDocument.createElement('div');
 		filename.style.cssText = 'display:inline-block;position:relative;padding:3px 6px 0 6px;' +
-			'vertical-align:top;font-family:Helvetica,Arial;font-size:12px;top:4px;cursor:default;'
-		filename.setAttribute('title', this.graphConfig.title);
+			'vertical-align:top;font-family:Helvetica,Arial;font-size:12px;top:4px;cursor:default;color:#000;';
+		filename.setAttribute('title', this.graphConfig.titleTooltip || this.graphConfig.title);
 		mxUtils.write(filename, this.graphConfig.title);
 		mxUtils.setOpacity(filename, 70);
 		
@@ -1646,6 +1696,8 @@ GraphViewer.prototype.addToolbar = function()
 		else
 		{
 			toolbar.style.top = -this.toolbarHeight + 'px';
+			// geDarkMode already set on container, so remove it from toolbar such that it doesn't invert colors twice
+			toolbar.classList.remove('geDarkMode');
 			container.appendChild(toolbar);
 		}
 	});
@@ -1679,6 +1731,7 @@ GraphViewer.prototype.createToolbarButton = function(fn, imgSrc, tip, enabled)
 	var a = document.createElement('div');
 	a.style.borderRight = '1px solid #d0d0d0';
 	a.style.padding = '3px 6px 3px 6px';
+	
 	mxEvent.addListener(a, 'click', fn);
 
 	if (tip != null)
@@ -1691,7 +1744,8 @@ GraphViewer.prototype.createToolbarButton = function(fn, imgSrc, tip, enabled)
 	img.setAttribute('border', '0');
 	img.setAttribute('src', imgSrc);
 	img.style.width = '18px';
-
+	img.className = 'geAdaptiveAsset';
+	
 	if (enabled == null || enabled)
 	{
 		mxEvent.addListener(a, 'mouseenter', function()
@@ -1740,7 +1794,7 @@ GraphViewer.prototype.addClickHandler = function(graph, ui)
 {
 	graph.linkPolicy = this.graphConfig.target || graph.linkPolicy;
 
-	graph.addClickHandler(this.graphConfig.highlight, mxUtils.bind(this, function(evt, href)
+	graph.addClickHandler(this.graphConfig.highlight, mxUtils.bind(this, function(evt, href, associatedCell)
 	{
 		if (href == null)
 		{
@@ -1776,7 +1830,7 @@ GraphViewer.prototype.addClickHandler = function(graph, ui)
 		}
 		else if (href != null && ui == null && graph.isCustomLink(href) &&
 			(mxEvent.isTouchEvent(evt) || !mxEvent.isPopupTrigger(evt)) &&
-			graph.customLinkClicked(href))
+			graph.customLinkClicked(href, associatedCell))
 		{
 			// Workaround for text selection in Firefox on Windows
 			mxUtils.clearSelection();
@@ -1887,7 +1941,7 @@ GraphViewer.prototype.showLightbox = function(editable, closable, target)
 /**
  * Adds the given array of stencils to avoid dynamic loading of shapes.
  */
-GraphViewer.prototype.showLocalLightbox = function()
+GraphViewer.prototype.showLocalLightbox = function(container)
 {
 	var backdrop = document.createElement('div');
 
@@ -1903,6 +1957,7 @@ GraphViewer.prototype.showLocalLightbox = function()
 	closeImg.setAttribute('src', Editor.closeBlackImage);
 	closeImg.style.cssText = 'position:fixed;top:32px;right:32px;';
 	closeImg.style.cursor = 'pointer';
+	closeImg.className = 'geAdaptiveAsset';
 	
 	mxEvent.addListener(closeImg, 'click', function()
 	{
@@ -1923,6 +1978,17 @@ GraphViewer.prototype.showLocalLightbox = function()
 		urlParams['tags'] = '{}';
 	}
 
+	if (container != null)
+	{
+		try
+		{
+			var toolbarConfig = JSON.parse(decodeURIComponent(urlParams['toolbar-config'] || '{}'));
+			toolbarConfig.noCloseBtn = true;
+			urlParams['toolbar-config'] = encodeURIComponent(JSON.stringify(toolbarConfig));
+		}
+		catch (e) {}
+	}
+
 	// PostMessage not working and Permission denied for opened access in IE9-
 	if (document.documentMode == null || document.documentMode >= 10)
 	{
@@ -1930,6 +1996,11 @@ GraphViewer.prototype.showLocalLightbox = function()
 		Editor.prototype.editButtonFunc = this.graphConfig.editFunc;
 	}
 	
+	Editor.isDarkMode = mxUtils.bind(this, function()
+	{	
+		return this.darkMode;
+	});
+
 	EditorUi.prototype.updateActionStates = function() {};
 	EditorUi.prototype.addBeforeUnloadListener = function() {};
 	EditorUi.prototype.addChromelessClickHandler = function() {};
@@ -1940,6 +2011,12 @@ GraphViewer.prototype.showLocalLightbox = function()
 	Graph.prototype.shadowId = 'lightboxDropShadow';
 	
 	var ui = new EditorUi(new Editor(true), document.createElement('div'), true);
+
+	if (this.darkMode)
+	{
+		ui.setDarkMode(true);
+	}
+
 	ui.editor.editBlankUrl = this.editBlankUrl;
 	
 	// Overrides instance variable and restores prototype state
@@ -1963,20 +2040,23 @@ GraphViewer.prototype.showLocalLightbox = function()
 	
 	ui.destroy = function()
 	{
-		mxEvent.removeListener(document.documentElement, 'keydown', keydownHandler);
-		document.body.removeChild(backdrop);
-		document.body.removeChild(closeImg);
-		document.body.style.overflow = overflow;
-		GraphViewer.resizeSensorEnabled = true;
-		
-		destroy.apply(this, arguments);
+		if (container == null)
+		{
+			mxEvent.removeListener(document.documentElement, 'keydown', keydownHandler);
+			document.body.removeChild(backdrop);
+			document.body.removeChild(closeImg);
+			document.body.style.overflow = overflow;
+			GraphViewer.resizeSensorEnabled = true;
+			
+			destroy.apply(this, arguments);
+		}
 	};
 	
 	var graph = ui.editor.graph;
 	var lightbox = graph.container;
 	lightbox.style.overflow = 'hidden';
 	
-	if (this.lightboxChrome)
+	if (this.lightboxChrome && container == null)
 	{
 		lightbox.style.border = '1px solid #c0c0c0';
 		lightbox.style.margin = '40px';
@@ -2026,14 +2106,6 @@ GraphViewer.prototype.showLocalLightbox = function()
 	
 	GraphViewer.resizeSensorEnabled = false;
 	document.body.style.overflow = 'hidden';
-
-	// Workaround for possible rendering issues
-	if (!mxClient.IS_SF && !mxClient.IS_EDGE)
-	{
-		mxUtils.setPrefixedStyle(lightbox.style, 'transform', 'rotateY(90deg)');
-		mxUtils.setPrefixedStyle(lightbox.style, 'transition', 'all .25s ease-in-out');
-	}
-	
 	this.addClickHandler(graph, ui);
 
 	window.setTimeout(mxUtils.bind(this, function()
@@ -2051,8 +2123,16 @@ GraphViewer.prototype.showLocalLightbox = function()
 			lightbox.style.zIndex = this.lightboxZIndex;
 			closeImg.style.zIndex = this.lightboxZIndex;
 
-			document.body.appendChild(lightbox);
-			document.body.appendChild(closeImg);
+			if (container != null)
+			{
+				container.innerHTML = '';
+				container.appendChild(lightbox);
+			}
+			else
+			{
+				document.body.appendChild(lightbox);
+				document.body.appendChild(closeImg);
+			}
 			
 			ui.setFileData(this.xml);
 			
@@ -2061,16 +2141,16 @@ GraphViewer.prototype.showLocalLightbox = function()
 			ui.chromelessToolbar.style.zIndex = this.lightboxZIndex;
 			
 			// Workaround for clipping in IE11-
-			document.body.appendChild(ui.chromelessToolbar);
+			(container || document.body).appendChild(ui.chromelessToolbar);
 		
 			ui.getEditBlankXml = mxUtils.bind(this, function()
 			{
 				return this.xml;
 			});
 		
+			this.showLayers(graph, this.graph);
 			ui.lightboxFit();
 			ui.chromelessResize();
-			this.showLayers(graph, this.graph);
 		}
 		catch (e)
 		{
@@ -2098,20 +2178,20 @@ Dialog.prototype.getDocumentSize = function()
 /**
  * 
  */
-GraphViewer.prototype.updateTitle = function(title)
+GraphViewer.prototype.updateTitle = function(title, titleTooltip)
 {
 	title = title || '';
 	
 	if (this.showTitleAsTooltip && this.graph != null && this.graph.container != null)
 	{
-		this.graph.container.setAttribute('title', title);
+		this.graph.container.setAttribute('title', titleTooltip || title);
     }
 	
 	if (this.filename != null)
 	{
 		this.filename.innerText = '';
 		mxUtils.write(this.filename, title);
-		this.filename.setAttribute('title', title);
+		this.filename.setAttribute('title', titleTooltip || title);
 	}
 };
 
@@ -2220,6 +2300,8 @@ GraphViewer.createViewerForElement = function(element, callback)
 
 GraphViewer.logAncestorFrames = function()
 {
+	return;
+
 	try
 	{
 		if (window.location.ancestorOrigins && window.location.hostname &&
@@ -2268,7 +2350,12 @@ GraphViewer.initCss = function()
 	{
 		var style = document.createElement('style')
 		style.type = 'text/css';
-		style.innerHTML = ['div.mxTooltip {',
+		style.innerHTML = ['.geDarkMode {',
+			'filter: invert(93%) hue-rotate(180deg);',
+			'background-color: transparent;}',
+			'.geDarkMode image, .geDarkMode img:not(.geAdaptiveAsset) {',
+			'filter: invert(100%) hue-rotate(180deg) saturate(1.25);}',
+			'div.mxTooltip {',
 			'-webkit-box-shadow: 3px 3px 12px #C0C0C0;',
 			'-moz-box-shadow: 3px 3px 12px #C0C0C0;',
 			'box-shadow: 3px 3px 12px #C0C0C0;',
@@ -2380,6 +2467,12 @@ GraphViewer.getUrl = function(url, onload, onerror)
 GraphViewer.resizeSensorEnabled = true;
 
 /**
+ * Specifies if ResizeObserver should be used instead of ResizeSensor.
+ * Default is true.
+ */
+GraphViewer.useResizeObserver = true;
+
+/**
  * Redirects editing to absolue URLs.
  */
 GraphViewer.useResizeSensor = true;
@@ -2418,6 +2511,34 @@ GraphViewer.useResizeSensor = true;
     			fn();
     		}
     	};
+
+		// Uses ResizeObserver, if available
+		if (GraphViewer.useResizeObserver && typeof ResizeObserver !== 'undefined')
+		{
+			var callbackThread = null;
+			var active = false;
+
+			new ResizeObserver(function()
+			{
+				if (!active)
+				{
+					if (callbackThread != null)
+					{
+						window.clearTimeout(callbackThread);
+					}
+
+					callbackThread = window.setTimeout(function()
+					{
+						active = true;
+						callback();
+						callbackThread = null;
+						active = false;
+					}, 200);
+				}
+			}).observe(element)
+
+			return
+		}
     	
         /**
          *
